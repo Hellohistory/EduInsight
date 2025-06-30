@@ -4,7 +4,7 @@ import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+# from fastapi.staticfiles import StaticFiles
 
 from app.feature_analysis import router as analysis_router
 from app.feature_classes import router as classes_router
@@ -62,17 +62,17 @@ def read_root():
     return {"message": "欢迎使用由 Hellohistory 开发设计的 EduInsight 分析系统 API"}
 
 
-static_dir = "dist"
-if os.path.exists(static_dir) and os.path.isdir(static_dir):
-    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
-    print(f"INFO:     Serving frontend from '{static_dir}' directory.")
-else:
-    print(f"WARNING:  '{static_dir}' directory not found. Frontend will not be served.")
-
-
-    @app.get("/", summary="主页")
-    def read_root_no_frontend():
-        return {"message": "EduInsight API 正在运行，但未找到前端 dist 目录。"}
+# static_dir = "dist"
+# if os.path.exists(static_dir) and os.path.isdir(static_dir):
+#     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+#     print(f"INFO:     Serving frontend from '{static_dir}' directory.")
+# else:
+#     print(f"WARNING:  '{static_dir}' directory not found. Frontend will not be served.")
+#
+#
+#     @app.get("/", summary="主页")
+#     def read_root_no_frontend():
+#         return {"message": "EduInsight API 正在运行，但未找到前端 dist 目录。"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

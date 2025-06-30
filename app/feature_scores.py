@@ -118,3 +118,54 @@ def handle_get_scores_for_class(exam_id: int, class_id: int, db: Session = Depen
         })
 
     return response_data
+
+
+@router.put("/single", status_code=200, summary="录入或更新单个成绩")
+def handle_record_single_score(
+        score_in: schemas.SingleScoreUpdate,
+        db: Session = Depends(get_db)
+):
+    """
+    为单个学生、单个科目记录或更新分数。
+    这是前端实现“自动保存”功能的核心API。
+    """
+    # 校验考试和学生是否存在
+    exam = db.query(models.Exam).filter(models.Exam.id == score_in.exam_id).first()
+    if not exam:
+        raise HTTPException(status_code=404, detail="考试未找到")
+    if exam.status != 'draft':
+        raise HTTPException(status_code=403, detail=f"考试 '{exam.name}' 已锁定，无法修改成绩。")
+
+    student = db.query(models.Student).filter(models.Student.id == score_in.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="学生未找到")
+
+    subject = db.query(models.Subject).filter(models.Subject.name == score_in.subject_name).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail=f"科目 '{score_in.subject_name}' 未找到")
+
+    # 查找或创建成绩记录
+    db_score = db.query(models.Score).filter_by(
+        exam_id=score_in.exam_id,
+        student_id=score_in.student_id,
+        subject_id=subject.id
+    ).first()
+
+    if db_score:
+        db_score.score = score_in.score
+    else:
+        db_score = models.Score(
+            exam_id=score_in.exam_id,
+            student_id=score_in.student_id,
+            subject_id=subject.id,
+            score=score_in.score
+        )
+        db.add(db_score)
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"数据库保存失败: {str(e)}")
+
+    return {"message": "成绩已保存"}
