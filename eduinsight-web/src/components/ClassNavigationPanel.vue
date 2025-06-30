@@ -176,7 +176,6 @@ const handleDelete = async (nodeData: IGradeNode | IClassNode) => {
 
     let success = false;
     if (isGrade) {
-      // 【TODO 已完成】: 调用 store 中删除年级的 action
       success = await classStore.handleDeleteGrade(nodeData.id);
       if (success) {
         ElMessage.success('年级已删除');
