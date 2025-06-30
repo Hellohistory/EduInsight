@@ -231,3 +231,48 @@ def analyze_historical_trends(student_report: Dict, student_history: Dict) -> No
         if len(total_t_scores) >= 2:
             history_metrics["stability"]["totalTScoreVolatility"] = round(statistics.pstdev(total_t_scores), 2)
     student_report["metrics"]["history"] = history_metrics
+
+
+# ==============================================================================
+# --- 高级历史趋势分析函数 ---
+# ==============================================================================
+
+def analyze_trend_slope(historical_values: List[float]) -> float:
+    """
+    使用一元线性回归计算一系列历史数据的趋势斜率。
+    斜率 > 0 表示上升趋势, < 0 表示下降趋势。绝对值大小代表趋势快慢。
+    """
+    n = len(historical_values)
+    if n < 2:
+        return 0.0
+
+    x_series = list(range(1, n + 1))  # x为时间序列, 即 1, 2, 3, ...
+    y_series = historical_values
+
+    try:
+        # y_series 中的值可能为None或无效，需要过滤
+        valid_points = [(x, y) for x, y in zip(x_series, y_series) if y is not None]
+        if len(valid_points) < 2:
+            return 0.0
+
+        n_valid = len(valid_points)
+        x_valid = [p[0] for p in valid_points]
+        y_valid = [p[1] for p in valid_points]
+
+        sum_x = sum(x_valid)
+        sum_y = sum(y_valid)
+        sum_xy = sum(x * y for x, y in valid_points)
+        sum_xx = sum(x * x for x in x_valid)
+
+        # 根据一元线性回归斜率公式计算
+        # b = (NΣ(xy) - ΣxΣy) / (NΣ(x²) - (Σx)²)
+        numerator = n_valid * sum_xy - sum_x * sum_y
+        denominator = n_valid * sum_xx - sum_x * sum_x
+
+        if denominator == 0:
+            return 0.0
+
+        slope = numerator / denominator
+        return round(slope, 3)
+    except (TypeError, ZeroDivisionError):
+        return 0.0
