@@ -196,6 +196,7 @@ export interface IDescriptiveStats {
   highAchieverPenetration?: number;
   strugglerSupportIndex?: number;
   academicCoreDensity?: number;
+  frequencyDistribution: Record<string, number>;
   boxPlotData: { min: number; q1: number; median: number; q3: number; max: number; };
 }
 

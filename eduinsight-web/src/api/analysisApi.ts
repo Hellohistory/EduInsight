@@ -31,7 +31,6 @@ export interface ISubmitResponse {
   report_id: number;
 }
 
-// 【新增】为提交AI分析任务定义更精确的响应类型
 export interface ISubmitAiResponse extends ISubmitResponse {
   ai_analysis_status: string;
   analysis?: string | null; // 当任务已完成时，可能直接返回结果
