@@ -22,6 +22,10 @@
         <el-tab-pane label="学生列表" name="roster">
            <StudentDetailListTab />
         </el-tab-pane>
+
+        <el-tab-pane label="AI 智能分析" name="ai-analysis">
+           <AiAnalysisReport :report-id="parseInt(props.id)" />
+        </el-tab-pane>
       </el-tabs>
 
     </template>
@@ -44,16 +48,17 @@ import { ref, onMounted, onUnmounted } from 'vue';
 import { ElTabs, ElTabPane, ElResult, ElButton, vLoading } from 'element-plus';
 import { useAnalysisReportStore } from '@/stores/analysisReportStore';
 
-// 引入新的和复用的组件
 import ReportSummary from '@/components/reports/tabs/ReportSummary.vue';
-import StudentDetailListTab from '@/components/reports/tabs/StudentDetailListTab.vue';
 import ClassComparisonTab from '@/components/reports/tabs/ClassComparisonTab.vue';
 import ClassDiagnosticsTab from '@/components/reports/tabs/ClassDiagnosticsTab.vue';
+import StudentDetailListTab from '@/components/reports/tabs/StudentDetailListTab.vue';
+import AiAnalysisReport from '@/components/reports/AiAnalysisReport.vue';
+
 
 const props = defineProps<{ id: string }>();
 
 const reportStore = useAnalysisReportStore();
-const activeMainTab = ref('summary'); // 默认选中新的“报告摘要”
+const activeMainTab = ref('summary');
 
 const fetchData = () => {
   const reportId = parseInt(props.id, 10);

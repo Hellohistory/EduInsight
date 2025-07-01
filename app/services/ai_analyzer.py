@@ -1,142 +1,141 @@
+# app/services/ai_analyzer.py
 import json
+
 from sqlalchemy.orm import Session
+
 from app import models
 from app.services import llm_service
-from app.services.ai_prompt import PROMPT_TEMPLATE, COMPARISON_PROMPT_TEMPLATE
 
+PROMPT_SUMMARY = """
+# 角色: 顶尖教育数据科学家
+# 任务: 基于年级整体统计数据，生成一份高度浓缩的核心洞察摘要。
+# 核心指令:
+1.  **试卷质量评估**: 首先对 `difficulty` 和 `discriminationIndex` 做出明确判断，这决定了后续分析的价值。
+2.  **学情结构诊断**: 使用 `highAchieverPenetration`, `academicCoreDensity`, `strugglerSupportIndex` 判断学生群体是“橄榄型”、“哑铃型”还是其他分布，并解释其教学意义。
+3.  **学科关联洞察**: 从 `correlationMatrix` 中找出最值得关注的一两个关联（或不关联）现象，并提出可能的解释。
+4.  **语言风格**: 必须精炼、专业，直接切入要点，总字数控制在300字以内。
+# 输入数据: (仅包含 groupStats 和 fullMarks)
+```json
+{json_data_string}
+```"""
 
-def _prepare_single_report_data_for_llm(full_report: dict) -> dict:
-    """
-    为单场考试报告准备LLM输入数据。
+PROMPT_COMPARISON = """
 
-    此函数从完整的报告JSON中提取宏观（年级）和中观（班级）的统计摘要，
-    完全移除了学生个体数据，以聚焦于整体和集体的表现。
+角色: 资深教学策略顾问
+任务: 基于所有班级的统计数据，进行横向对比，识别出各班的特色和关键差异。
+核心指令:
+找出领跑者和落后者: 对比各班在总分和核心学科上的平均分、优秀率、及格率，直接点名。
 
-    Args:
-        full_report: 包含完整分析数据的字典。
+分析班级画像: 结合 quartileCompetitiveness (四分位竞争力) 和 homogeneityIndex (内部均衡度)，为每个班级打上“画像标签”，例如：
 
-    Returns:
-        一个精简后的字典，仅包含用于LLM分析的摘要数据。
-    """
-    tables_summary = []
-    # 遍历每个班级的数据
-    for table in full_report.get('tables', []):
-        # 确保班级名和班级统计数据存在
-        if 'tableName' in table and 'tableStats' in table:
-            # 只将班级名和班级统计数据加入摘要列表
-            tables_summary.append({
-                "tableName": table['tableName'],
-                "tableStats": table['tableStats']
-            })
+“(1)班：高分领跑型” (高分位竞争力强，但可能内部均衡度不高)
 
-    llm_data = {
-        "groupName": full_report.get('groupName'),
-        "fullMarks": full_report.get('fullMarks'),
-        "groupStats": full_report.get('groupStats'),
-        "tables": tables_summary,
-    }
-    return llm_data
+“(2)班：基础扎实型” (中低分位竞争力强，及格率有保障)
 
+“(3)班：整体均衡型” (各项指标接近年级平均，内部均衡度好)
 
-def _prepare_comparison_data_for_llm(full_report: dict) -> dict:
-    """
-    为多场对比分析报告准备LLM输入数据。
+聚焦差异: 重点分析班级之间差异最大的指标，并推测可能的原因（如教学风格、班级管理等）。
 
-    此函数提取学生在多次考试中的表现变化数据，让LLM能够聚焦于
-    分析进步、退步和趋势。
+输入数据: (包含 groupStats 和所有班级的 tableStats)
+JSON
 
-    Args:
-        full_report: 包含完整对比分析数据的字典。
+{json_data_string}
+"""
 
-    Returns:
-        一个精简后的字典，包含用于LLM分析的核心对比数据。
-    """
-    # 对比报告的数据结构已经很精炼，主要是提取核心部分
-    return {
-        "compared_exams": full_report.get("metadata", {}).get("compared_exams", []),
-        "students_progress": full_report.get("students", {})
-    }
+PROMPT_SINGLE_CLASS = """
+
+角色: 经验丰富的班主任和诊断专家
+任务: 为指定的这一个班级，提供一份详细、可落地的深度诊断报告。
+核心指令:
+自我定位: 首先，将本班的各项核心指标（平均分、优秀率、标准差等）与年级平均水平进行全面对比，明确本班在年级中的位置。
+
+内部问题诊断:
+
+分析本班的 highAchieverPenetration 和 strugglerSupportIndex，判断班级的优势是在于“拔尖”还是“兜底”。
+
+解读 stdDev 和 homogeneityIndex，评估班内学业分化的严重程度。
+
+提出针对性建议:
+
+如果分化严重，提出分层教学或“一生一策”辅导的具体建议。
+
+如果高分层薄弱，提出如何“拔尖”的策略。
+
+如果后进生问题突出，提出如何“补差”的方案。
+
+建议必须具体、可行，直接面向班主任的日常工作。
+
+输入数据: (仅包含指定班级的 tableStats 和年级的 groupStats 作为对比基准)
+JSON
+
+{json_data_string}
+"""
 
 
 def _create_llm_prompt(report_summary: dict, prompt_template: str) -> str:
-    """
-    根据报告摘要和指定的Prompt模板，创建一个完整的LLM输入Prompt。
-
-    Args:
-        report_summary: 经过预处理的报告摘要数据。
-        prompt_template: 用于指导LLM分析的特定任务模板。
-
-    Returns:
-        一个包含角色定义、任务指令和JSON数据的完整字符串。
-    """
+    """辅助函数：创建最终的Prompt字符串"""
     json_data_string = json.dumps(report_summary, ensure_ascii=False, indent=2)
-
-    final_prompt = f"""{prompt_template}
-
-# 输入的核心数据
-```json
-{json_data_string}
-```
-"""
-    return final_prompt
+    return prompt_template.replace("{json_data_string}", json_data_string)
 
 
 def get_or_generate_ai_analysis(report_id: int, db: Session) -> tuple[str, str]:
     """
-    获取或生成AI分析报告的核心服务函数。
-
-    该函数能智能识别报告类型（单场或对比），并调用相应的分析逻辑。
-    如果已有缓存且状态为完成，则直接返回缓存结果，否则调用LLM服务生成新的分析。
-    此函数现在是后台任务的核心执行者。
-
-    Args:
-        report_id: 目标报告在数据库中的ID。
-        db: SQLAlchemy的数据库会话实例。
-
-    Returns:
-        一个元组，包含两个元素:
-        - analysis (str): AI生成的分析报告文本。
-        - source (str): 数据来源，"cache" 或 "generated"。
-
-    Raises:
-        ValueError: 如果报告未找到、状态不正确或数据为空。
-        NotImplementedError: 如果遇到不支持的报告类型。
-        RuntimeError: 如果LLM服务调用失败或发生其他内部错误。
+    分步调用LLM，为报告的不同部分生成分析，最后组装成一个JSON对象。
     """
-    report = db.query(models.AnalysisReport).filter(
-        models.AnalysisReport.id == report_id
-    ).first()
-
-    if not report:
-        raise ValueError("报告未找到")
-
-    if report.status != 'completed':
-        raise ValueError(f"主报告状态为 {report.status}，无法进行AI分析。请等待主报告分析完成后再试。")
-
+    report = db.query(models.AnalysisReport).filter(models.AnalysisReport.id == report_id).first()
+    if not report: raise ValueError("报告未找到")
+    if report.status != 'completed': raise ValueError(f"主报告状态为 {report.status}，无法分析。")
     if report.ai_analysis_cache and report.ai_analysis_status == 'completed':
         return report.ai_analysis_cache, "cache"
+    if not report.full_report_data: raise ValueError("报告数据为空，无法分析。")
 
-    if not report.full_report_data:
-        raise ValueError("报告数据为空，无法进行AI分析。")
+    full_report = report.full_report_data
+    report_type = report.report_type
+
+    # 目前仅为 'single' 类型报告实现新的结构化AI分析
+    if report_type != 'single':
+        raise NotImplementedError(f"结构化AI分析暂不支持 '{report_type}' 类型的报告。")
 
     try:
-        if report.report_type == 'single':
-            llm_data = _prepare_single_report_data_for_llm(report.full_report_data)
-            prompt = _create_llm_prompt(llm_data, PROMPT_TEMPLATE)
+        # --- 核心改造：分步生成，最后组装 ---
+        ai_result_json = {
+            "summary": "",
+            "comparison": "",
+            "diagnostics": {}
+        }
 
-        elif report.report_type == 'comparison':
-            llm_data = _prepare_comparison_data_for_llm(report.full_report_data)
-            prompt = _create_llm_prompt(llm_data, COMPARISON_PROMPT_TEMPLATE)
+        # 1. 生成年级摘要
+        summary_data = {"groupStats": full_report.get('groupStats'), "fullMarks": full_report.get('fullMarks')}
+        summary_prompt = _create_llm_prompt(summary_data, PROMPT_SUMMARY)
+        ai_result_json["summary"] = llm_service.get_completion(summary_prompt)
 
-        else:
-            raise NotImplementedError(f"不支持的报告类型: '{report.report_type}'")
+        # 2. 生成班级横向对比
+        comparison_data = {
+            "groupStats": full_report.get('groupStats'),
+            "tables": [{
+                "tableName": t.get('tableName'),
+                "tableStats": t.get('tableStats')
+            } for t in full_report.get('tables', [])]
+        }
+        comparison_prompt = _create_llm_prompt(comparison_data, PROMPT_COMPARISON)
+        ai_result_json["comparison"] = llm_service.get_completion(comparison_prompt)
 
-        ai_result = llm_service.get_completion(prompt)
+        # 3. 循环为每个班级生成深度诊断
+        for table in full_report.get('tables', []):
+            class_name = table.get('tableName')
+            if not class_name: continue
 
-        if not ai_result:
-            raise RuntimeError("LLM服务调用失败或返回空结果")
+            single_class_data = {
+                "className": class_name,
+                "classStats": table.get('tableStats'),
+                "gradeStats": full_report.get('groupStats')  # 传入年级数据作为对比
+            }
+            single_class_prompt = _create_llm_prompt(single_class_data, PROMPT_SINGLE_CLASS)
+            ai_result_json["diagnostics"][class_name] = llm_service.get_completion(single_class_prompt)
 
-        report.ai_analysis_cache = ai_result
+        # 将最终的JSON对象转为字符串存入数据库
+        final_result_str = json.dumps(ai_result_json, ensure_ascii=False)
+        report.ai_analysis_cache = final_result_str
         report.ai_analysis_status = 'completed'
         db.commit()
         db.refresh(report)
@@ -144,4 +143,7 @@ def get_or_generate_ai_analysis(report_id: int, db: Session) -> tuple[str, str]:
         return report.ai_analysis_cache, "generated"
 
     except Exception as e:
-        raise RuntimeError(f"生成AI分析时发生内部错误 (报告ID: {report_id}, 类型: {report.report_type}): {str(e)}")
+        # 更新：在最外层捕获异常，确保任何一步失败都能正确标记
+        report.ai_analysis_status = 'failed'
+        db.commit()
+        raise RuntimeError(f"生成结构化AI分析时发生内部错误 (报告ID: {report_id}): {str(e)}")
