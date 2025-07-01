@@ -1,3 +1,4 @@
+<!--src/components/dialogs/StudentTransferDialog.vue-->
 <template>
   <el-dialog
     v-model="dialogVisible"
@@ -61,11 +62,10 @@ const dialogVisible = computed({
   set: (val) => emit('update:modelValue', val),
 });
 
-// 【修改】handleNodeClick 现在只负责调用 store 的 action
-const handleNodeClick = (nodeData: IGradeNode | IClassNode) => {
-  classStore.selectNode(nodeData.id);
-};
 
+const handleNodeClick = (nodeData: IGradeNode | IClassNode) => {
+  classStore.selectNode(nodeData);
+};
 
 const handleSubmit = () => {
     if (selectedNode.value) {

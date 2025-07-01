@@ -1,3 +1,4 @@
+<!--src/components/StudentGrid.vue-->
 <template>
   <div class="student-grid-container">
     <div class="header-bar">
@@ -194,7 +195,9 @@ const handleFilterChange = () => {
 watch(() => props.selectedClass, (newClass, oldClass) => {
   if (isEditMode.value) {
     ElMessage.warning('请先保存或取消编辑模式，再切换班级！');
-    if (oldClass !== undefined) classStore.selectClass(oldClass);
+    if (oldClass !== undefined && oldClass !== null) {
+        classStore.selectNode(oldClass);
+    }
     return;
   }
   if (newClass) {
