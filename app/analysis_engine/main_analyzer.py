@@ -1,5 +1,3 @@
-# app/analysis_engine/main_analyzer.py
-
 import statistics
 from typing import Dict, Optional, Any
 
@@ -44,7 +42,8 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
     # --- 历史数据预处理（如果存在） ---
     if student_history_map:
         for s_name, history in student_history_map.items():
-            if history.get("allExams"):
+            # 稳定性增强：确保列表非空再访问索引
+            if history.get("allExams") and len(history["allExams"]) > 0:
                 last_exam_wrapper = history["allExams"][-1]
                 if last_exam_wrapper.get("studentScores"):
                     history["lastExam"] = last_exam_wrapper["studentScores"][0]
@@ -99,12 +98,14 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
     for subject in subjects:
         scores = [s['scores'].get(subject, 0) for s in all_students_flat]
         group_stats[subject] = core.calculate_descriptive_stats(scores, data['fullMarks'][subject])
-        group_stats[subject]['discriminationIndex'] = core.calculate_discrimination_index(scores, data['fullMarks'][subject])
+        group_stats[subject]['discriminationIndex'] = core.calculate_discrimination_index(scores,
+                                                                                          data['fullMarks'][subject])
         group_stats[subject]['_scores_cache'] = scores  # 用于后续群体结构分析
 
     total_scores_group = [s['totalScore'] for s in all_students_flat]
     group_stats['totalScore'] = core.calculate_descriptive_stats(total_scores_group, total_full_marks)
-    group_stats['totalScore']['discriminationIndex'] = core.calculate_discrimination_index(total_scores_group, total_full_marks)
+    group_stats['totalScore']['discriminationIndex'] = core.calculate_discrimination_index(total_scores_group,
+                                                                                           total_full_marks)
 
     # 群体结构性指标分析
     core.calculate_advanced_group_metrics(total_scores_group, group_stats['totalScore'])
@@ -146,13 +147,15 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
             scores = [s['scores'].get(subject, 0) for s in class_students_data]
             class_scores_by_subject[subject] = scores
             table_stats[subject] = core.calculate_descriptive_stats(scores, data['fullMarks'][subject])
-            table_stats[subject]['discriminationIndex'] = core.calculate_discrimination_index(scores, data['fullMarks'][subject])
+            table_stats[subject]['discriminationIndex'] = core.calculate_discrimination_index(scores, data['fullMarks'][
+                subject])
             core.calculate_advanced_group_metrics(scores, table_stats[subject])
 
         # 班级总分统计指标
         total_scores_table = [s['totalScore'] for s in class_students_data]
         table_stats['totalScore'] = core.calculate_descriptive_stats(total_scores_table, total_full_marks)
-        table_stats['totalScore']['discriminationIndex'] = core.calculate_discrimination_index(total_scores_table, total_full_marks)
+        table_stats['totalScore']['discriminationIndex'] = core.calculate_discrimination_index(total_scores_table,
+                                                                                               total_full_marks)
         core.calculate_advanced_group_metrics(total_scores_table, table_stats['totalScore'])
 
         # 班级 VS 年级横向指标
@@ -176,8 +179,15 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
                 std_dev = gs_subj.get('stdDev', 0)
                 fm_subj = data['fullMarks'].get(subject, 100)
 
-                t_score = 50.0 + 10 * ((raw_score - mean) / std_dev) if std_dev != 0 else 50.0
-                z_scores[subject] = round((t_score - 50) / 10, 3) if std_dev != 0 else 0.0
+                # 准确性与清晰度优化：分开计算 Z 分和 T 分
+                if std_dev != 0:
+                    z_score = (raw_score - mean) / std_dev
+                    t_score = 50.0 + 10 * z_score
+                else:
+                    z_score = 0.0
+                    t_score = 50.0
+
+                z_scores[subject] = round(z_score, 3)
                 t_scores[subject] = round(t_score, 2)
                 score_rates[subject] = round(raw_score / fm_subj, 3) if fm_subj != 0 else 0.0
                 subject_t_score_tuples.append((subject, t_score))
@@ -185,7 +195,8 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
             # 总分 T 分
             total_score_mean = group_stats['totalScore'].get('mean', 0)
             total_score_std_dev = group_stats['totalScore'].get('stdDev', 0)
-            total_t_score = 50.0 + 10 * ((student_data['totalScore'] - total_score_mean) / total_score_std_dev) if total_score_std_dev != 0 else 50.0
+            total_t_score = 50.0 + 10 * ((student_data[
+                                              'totalScore'] - total_score_mean) / total_score_std_dev) if total_score_std_dev != 0 else 50.0
             t_scores['totalScore'] = round(total_t_score, 2)
 
             # 画像指标：强弱科、T分波动、画像类型
@@ -207,9 +218,12 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
                     "scoreRates": score_rates
                 },
                 "metrics": {
-                    "imbalanceIndex": round(statistics.pstdev(student_t_scores), 2) if len(student_t_scores) > 1 else 0.0,
-                    "strengthSubjects": [{"subject": s[0], "tScore": round(s[1], 2)} for s in sorted_by_t[:1]] if sorted_by_t else [],
-                    "weaknessSubjects": [{"subject": s[0], "tScore": round(s[1], 2)} for s in sorted_by_t[-1:]] if sorted_by_t else [],
+                    "imbalanceIndex": round(statistics.pstdev(student_t_scores), 2) if len(
+                        student_t_scores) > 1 else 0.0,
+                    "strengthSubjects": [{"subject": s[0], "tScore": round(s[1], 2)} for s in
+                                         sorted_by_t[:1]] if sorted_by_t else [],
+                    "weaknessSubjects": [{"subject": s[0], "tScore": round(s[1], 2)} for s in
+                                         sorted_by_t[-1:]] if sorted_by_t else [],
                 }
             }
 
@@ -220,7 +234,8 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
             if student_report['totalScore'] < pass_score_line:
                 student_report["metrics"]["pointsToPass"] = round(pass_score_line - student_report['totalScore'], 2)
             if student_report['totalScore'] < excellent_score_line:
-                student_report["metrics"]["pointsToExcellent"] = round(excellent_score_line - student_report['totalScore'], 2)
+                student_report["metrics"]["pointsToExcellent"] = round(
+                    excellent_score_line - student_report['totalScore'], 2)
 
             # 学生画像标签识别
             imbalance_index = student_report["metrics"]["imbalanceIndex"]
@@ -247,7 +262,8 @@ def perform_analysis(data: Dict, student_history_map: Optional[Dict[str, Any]] =
                 core.analyze_historical_trends(student_report, student_history_map[student_name])
                 all_exams = student_history_map[student_name].get("allExams", [])
                 if len(all_exams) >= 2:
-                    historical_ranks = [exam.get('studentScores', [{}])[0].get('gradePercentileRank') for exam in all_exams]
+                    historical_ranks = [exam.get('studentScores', [{}])[0].get('gradePercentileRank') for exam in
+                                        all_exams]
                     rank_slope = core.analyze_trend_slope(historical_ranks)
                     student_report["metrics"].setdefault("history", {})["gradePercentileRankSlope"] = rank_slope
 

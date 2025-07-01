@@ -1,5 +1,3 @@
-# analysis_engine/core.py
-
 import math
 import statistics
 from typing import Dict, List, Any
@@ -74,8 +72,12 @@ def calculate_frequency_distribution(scores: List[float], full_mark: float, bin_
     :param bin_size: 每个分数段的跨度（默认10分一档）
     :return: 字典结构，键为分数段，值为该段人数
     """
+    # 稳定性增强：防止 bin_size 为 0 导致崩溃
+    if bin_size <= 0:
+        return {}
     if not scores:
         return {}
+
     bins = {}
     int_full_mark = int(math.ceil(full_mark))
 
@@ -108,10 +110,11 @@ def calculate_frequency_distribution(scores: List[float], full_mark: float, bin_
 def calculate_descriptive_stats(scores_arr: List[float], full_mark: float) -> Dict[str, Any]:
     """
     计算一组分数的所有描述性统计量，包括均值、方差、箱线图数据、频率分布等。
+    （已重构以提升稳定性和计算精度）
     """
     count = len(scores_arr)
+    # 基础校验：如果没有任何分数，返回一个空的、结构一致的统计字典
     if count == 0:
-        # 返回空统计结构，避免后续出错
         return {
             "count": 0, "mean": 0, "stdDev": 0, "variance": 0, "min": 0, "q1": 0,
             "median": 0, "q3": 0, "max": 0, "range": 0, "excellentRate": 0,
@@ -121,27 +124,48 @@ def calculate_descriptive_stats(scores_arr: List[float], full_mark: float) -> Di
             "frequencyDistribution": {}
         }
 
-    # 阈值设置（优秀、良好、及格）
-    EXCELLENT_THRESHOLD, GOOD_THRESHOLD_LOWER, PASS_THRESHOLD = 0.85, 0.70, 0.60
-
-    # 基础统计量计算
+    # --- 核心统计量计算 ---
     mean = statistics.mean(scores_arr)
     std_dev = statistics.pstdev(scores_arr) if count > 1 else 0.0
     variance = statistics.pvariance(scores_arr) if count > 1 else 0.0
     min_val, max_val = min(scores_arr), max(scores_arr)
+    skew_kurt = calculate_skewness_kurtosis(scores_arr)
 
-    # 分位数计算（四分位）
     if count > 1:
         quantiles = statistics.quantiles(scores_arr, n=4)
         q1, median, q3 = quantiles[0], quantiles[1], quantiles[2]
     else:
         q1 = median = q3 = scores_arr[0]
 
-    # 描述性统计量组合
-    pass_count = sum(1 for s in scores_arr if s >= full_mark * PASS_THRESHOLD)
-    difficulty = round(mean / full_mark, 3) if full_mark != 0 else 0
-    skew_kurt = calculate_skewness_kurtosis(scores_arr)
+    # --- 比率性指标计算（增强稳定性与准确性） ---
+    pass_count = 0
+    excellent_count = 0
+    good_count = 0
+    difficulty = 0
 
+    # 稳定性增强：仅在满分有效时，才计算依赖于满分的比率和难度指标
+    if full_mark > 0:
+        PASS_THRESHOLD = 0.60
+        GOOD_THRESHOLD_LOWER = 0.70
+        EXCELLENT_THRESHOLD = 0.85
+
+        pass_count = sum(1 for s in scores_arr if s >= full_mark * PASS_THRESHOLD)
+        excellent_count = sum(1 for s in scores_arr if s >= full_mark * EXCELLENT_THRESHOLD)
+        good_count = sum(
+            1 for s in scores_arr if full_mark * GOOD_THRESHOLD_LOWER <= s < full_mark * EXCELLENT_THRESHOLD
+        )
+        difficulty = round(mean / full_mark, 3)
+
+    # 准确性提升：直接通过人数计算比率，避免浮点数减法误差
+    passRate = round(pass_count / count, 3)
+    excellentRate = round(excellent_count / count, 3)
+    goodRate = round(good_count / count, 3)
+
+    # 使用数值稳定的方法计算不合格率
+    low_score_count = count - pass_count
+    lowScoreRate = round(low_score_count / count, 3)
+
+    # --- 整合最终结果 ---
     stats = {
         "count": count,
         "mean": round(mean, 2),
@@ -153,12 +177,10 @@ def calculate_descriptive_stats(scores_arr: List[float], full_mark: float) -> Di
         "q3": round(q3, 2),
         "max": float(max_val),
         "range": round(max_val - min_val, 2),
-        "excellentRate": round(sum(1 for s in scores_arr if s >= full_mark * EXCELLENT_THRESHOLD) / count, 3),
-        "goodRate": round(sum(
-            1 for s in scores_arr if full_mark * GOOD_THRESHOLD_LOWER <= s < full_mark * EXCELLENT_THRESHOLD) / count,
-                          3),
-        "passRate": round(pass_count / count, 3),
-        "lowScoreRate": round(1 - (pass_count / count), 3) if pass_count != count else 0,
+        "excellentRate": excellentRate,
+        "goodRate": goodRate,
+        "passRate": passRate,
+        "lowScoreRate": lowScoreRate,
         "difficulty": difficulty,
         "skewness": skew_kurt['skewness'],
         "kurtosis": skew_kurt['kurtosis'],
