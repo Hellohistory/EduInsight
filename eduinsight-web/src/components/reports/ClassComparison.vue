@@ -66,7 +66,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ElTable, ElTableColumn, ElCard, ElRow, ElCol, ElSelect, ElOption, ElEmpty, ElTooltip, ElIcon } from 'element-plus';
-import { QuestionFilled } from '@element-plus/icons-vue'; // ✨ 引入图标
+import { QuestionFilled } from '@element-plus/icons-vue';
 import type { EChartsOption } from 'echarts';
 import type { IFullReport } from '@/types/dataModels';
 import VueEcharts from '@/components/charts/VueEcharts.vue';
@@ -77,11 +77,10 @@ const props = defineProps<{
   chartData: any;
 }>();
 
-// ✨【升级】为每个指标添加 description 属性
 const metricMapping = [
     { name: '平均分', key: 'mean', description: '班级全体学生在该科目上的算术平均分，反映班级的整体水平。' },
     { name: '标准差', key: 'stdDev', description: '衡量班级内部分数分布的离散程度。值越小，说明学生水平越整齐；值越大，则说明成绩差距悬殊。' },
-    { name: '及格率 (%)', key: 'passRate', isRate: true, description: '分数达到总分60%的学生占班级总人数的百分比。' },
+    { name: '总分及格率 (%)', key: 'passRate', isRate: true, description: '分数达到总分60%的学生占班级总人数的百分比。' },
     { name: '优秀率 (%)', key: 'excellentRate', isRate: true, description: '分数达到总分85%的学生占班级总人数的百分比。' },
     { name: '高分层厚度', key: 'highAchieverPenetration', description: '总分排名前27%学生的平均分。此数值反映了班级顶尖学生的整体实力，值越高，说明“学霸”群体的领先优势越大。' },
     { name: '后进生支撑力', key: 'strugglerSupportIndex', description: '总分排名后27%学生的平均分。此数值反映了班级学业后进生的基本盘水平，值越高，说明班级的“短板”不短，兜底做得好。' },
@@ -90,7 +89,6 @@ const metricMapping = [
 
 const classNames = computed(() => props.report.tables?.map(t => t.tableName) || []);
 
-// ✨【升级】在 comparisonData 计算属性中，把 description 也传递过去
 const comparisonData = computed(() => {
     return metricMapping.map(metric => {
         const row: Record<string, any> = {

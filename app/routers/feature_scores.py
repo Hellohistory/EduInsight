@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
-from . import models, schemas
-from .database import get_db
+from app import models, schemas
+from app.database import get_db
 
 
 def record_scores_batch(db: Session, batch_in: schemas.ScoresBatchInput):

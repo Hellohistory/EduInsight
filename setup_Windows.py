@@ -26,6 +26,6 @@ setup(
     description="由Hellohistory 开发的 EduInsight 分析系统",
     options={"build_exe": build_exe_options},
     executables=[
-        Executable("main.py", base=None, target_name="edu_insight_server")
+        Executable("main_Windows.py", base=None, target_name="edu_insight_server")
     ]
 )

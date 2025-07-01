@@ -1,3 +1,4 @@
+// src/stores/classStore.ts
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import {
@@ -15,7 +16,7 @@ import type {
     IGradeCreate,
     IClassCreate,
     IClassUpdate,
-    IGradeUpdate // 引入年级更新的类型
+    IGradeUpdate
 } from '@/types/dataModels';
 
 export const useClassStore = defineStore('class', () => {
@@ -173,7 +174,7 @@ export const useClassStore = defineStore('class', () => {
     handleCreateClass,
     handleUpdateClass,
     handleDeleteClass,
-    handleUpdateGrade, // 确保 handleUpdateGrade 被导出
+    handleUpdateGrade,
     handleDeleteGrade,
   };
 });

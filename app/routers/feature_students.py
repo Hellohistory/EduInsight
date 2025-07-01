@@ -7,8 +7,8 @@ from typing import List
 from datetime import date
 from sqlalchemy.sql.functions import func
 
-from . import models, schemas
-from .database import get_db
+from app import models, schemas
+from app.database import get_db
 
 # 创建路由器，归类到“学生管理”模块
 router = APIRouter(tags=["学生管理"])

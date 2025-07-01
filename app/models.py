@@ -133,12 +133,16 @@ class AnalysisReport(Base):
     report_name = Column(String, index=True, nullable=False)  # 报告名称
     exam_id = Column(Integer, ForeignKey("exams.id"), nullable=True)  # 关联考试（仅单场报告有）
     report_type = Column(String, default="single", nullable=False)  # 报告类型（single/comparison）
-    ai_analysis_cache = Column(Text, nullable=True)  # AI分析结果缓存（JSON或文本）
     source_description = Column(Text)  # 源描述（记录分析范围）
-    status = Column(String, default="processing", nullable=False)  # 状态（processing/completed/failed）
+    status = Column(String, default="processing", nullable=False)  # 主报告状态（processing/completed/failed）
     error_message = Column(Text, nullable=True)  # 错误信息
     full_report_data = Column(JSON, nullable=True)  # 分析报告的原始数据结构
     chart_data = Column(JSON, nullable=True)  # 图表数据（可惰性生成）
+
+    ai_analysis_cache = Column(Text, nullable=True)  # AI分析结果缓存
+
+    ai_analysis_status = Column(String, default="not_started", nullable=False)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())  # 创建时间
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())  # 更新时间
 

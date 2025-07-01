@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Dict, List, Optional, Any
 from datetime import date, datetime
 
+
 # =============================================================================
 # --- 通用与任务请求响应模型 ---
 # =============================================================================
@@ -279,6 +280,8 @@ class AnalysisReport(BaseModel):
     exam_id: Optional[int] = None
     status: str
     report_type: str
+    ai_analysis_status: str = Field(description="AI分析任务状态 (not_started, processing, completed, failed)")
+    ai_analysis_cache: Optional[str] = None
     error_message: Optional[str] = None
     full_report_data: Optional[Dict[str, Any]] = None
     chart_data: Optional[Dict[str, Any]] = None
