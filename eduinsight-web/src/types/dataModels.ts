@@ -147,6 +147,11 @@ export interface IAnalysisReport {
   report_name: string;
   status: 'processing' | 'completed' | 'failed';
   report_type: 'single' | 'comparison';
+
+  // 【核心修改】新增字段以支持异步AI分析
+  ai_analysis_status: 'not_started' | 'processing' | 'completed' | 'failed';
+  ai_analysis_cache: string | null;
+
   created_at: string;
   updated_at: string | null;
   exam?: IExam;
@@ -195,6 +200,7 @@ export interface IDescriptiveStats {
 }
 
 export interface IStudentReportData {
+  studentId: number; // 确保学生ID存在，用于对比分析
   studentName: string;
   tableName: string;
   totalScore: number;
@@ -245,6 +251,7 @@ export interface IFullReport {
     tables: IClassReportData[];
 }
 
+// IAnalysisReportDetail 会自动继承 IAnalysisReport 中的所有字段，包括我们新增的AI相关字段
 export interface IAnalysisReportDetail extends IAnalysisReport {
   full_report_data: IFullReport | null;
   error_message?: string;
