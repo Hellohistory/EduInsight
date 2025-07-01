@@ -1,25 +1,27 @@
-# app/feature_analysis.py
+# app/routers/feature_analysis.py
 
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app import models, schemas
 from app.analysis_engine.facade import AnalysisEngine
 from app.database import get_db
-from app.services import ai_analyzer, report_runner
+from app.services import report_runner
 
 router = APIRouter(
     tags=["学情分析 (Feature Analysis)"],
 )
 
-@router.post("/submit", response_model=schemas.ReportSubmissionResponse, summary="【核心】提交分析任务", status_code=202)
+
+@router.post("/submit", response_model=schemas.ReportSubmissionResponse, summary="提交单场考试分析任务",
+             status_code=status.HTTP_202_ACCEPTED)
 def handle_submit_analysis(
-    request: schemas.AnalysisSubmissionRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+        request: schemas.AnalysisSubmissionRequest,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db)
 ):
     """
     提交一个新的单场考试分析任务，支持范围为整校、年级或班级。
@@ -28,15 +30,14 @@ def handle_submit_analysis(
     """
     exam = db.query(models.Exam).filter(models.Exam.id == request.exam_id).first()
     if not exam:
-        raise HTTPException(status_code=404, detail="考试未找到")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="考试未找到")
 
-    # 若为整场考试分析，更新考试状态为 submitted，避免重复分析
     if request.scope.level == 'FULL_EXAM':
         if exam.status not in ['draft', 'submitted']:
-            raise HTTPException(status_code=400, detail="该考试已分析完成，无法重复提交全校分析。")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="该考试已分析完成，无法重复提交全校分析。")
         exam.status = 'submitted'
 
-    # 创建分析报告记录
     new_report = models.AnalysisReport(
         report_name=request.report_name,
         exam_id=request.exam_id,
@@ -48,7 +49,6 @@ def handle_submit_analysis(
     db.commit()
     db.refresh(new_report)
 
-    # 异步启动分析任务（后台执行）
     background_tasks.add_task(
         report_runner.run_single_exam_analysis_task,
         report_id=new_report.id,
@@ -59,11 +59,12 @@ def handle_submit_analysis(
     return {"message": "分析任务已成功提交，正在后台处理。", "report_id": new_report.id}
 
 
-@router.post("/compare", response_model=schemas.ReportSubmissionResponse, summary="创建多场考试对比分析任务", status_code=202)
+@router.post("/compare", response_model=schemas.ReportSubmissionResponse, summary="创建多场考试对比分析任务",
+             status_code=status.HTTP_202_ACCEPTED)
 def handle_create_comparison_report(
-    request_data: schemas.ComparisonReportRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+        request_data: schemas.ComparisonReportRequest,
+        background_tasks: BackgroundTasks,
+        db: Session = Depends(get_db)
 ):
     """
     基于多个已完成的单场考试报告，生成一份对比分析报告。
@@ -75,7 +76,7 @@ def handle_create_comparison_report(
     ).all()
 
     if len(source_reports) != len(request_data.report_ids):
-        raise HTTPException(status_code=404, detail="一个或多个源报告ID不存在或尚未分析完成。")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="一个或多个源报告ID不存在或尚未分析完成。")
 
     report_name = request_data.report_name or f"对 {len(source_reports)} 场考试的对比分析"
 
@@ -89,7 +90,6 @@ def handle_create_comparison_report(
     db.commit()
     db.refresh(new_comparison_report)
 
-    # 异步执行对比分析
     background_tasks.add_task(
         report_runner.run_comparison_analysis_task,
         comparison_report_id=new_comparison_report.id,
@@ -101,12 +101,12 @@ def handle_create_comparison_report(
 
 @router.get("/reports", response_model=schemas.PaginatedAnalysisReportResponse, summary="获取分析报告列表")
 def get_all_reports(
-    page: int = Query(1, gt=0, description="页码"),
-    page_size: int = Query(10, gt=0, le=100, description="每页数量"),
-    query: Optional[str] = Query(None, description="报告名称搜索关键字"),
-    status: Optional[str] = Query(None, description="按状态筛选 (processing, completed, failed)"),
-    report_type: Optional[str] = Query(None, description="按报告类型筛选 (single, comparison)"),
-    db: Session = Depends(get_db)
+        page: int = Query(1, gt=0, description="页码"),
+        page_size: int = Query(10, gt=0, le=100, description="每页数量"),
+        query: Optional[str] = Query(None, description="报告名称搜索关键字"),
+        status: Optional[str] = Query(None, description="按状态筛选 (processing, completed, failed)"),
+        report_type: Optional[str] = Query(None, description="按报告类型筛选 (single, comparison)"),
+        db: Session = Depends(get_db)
 ):
     """
     分页查询分析报告列表，支持名称模糊搜索、状态筛选、类型筛选。
@@ -120,21 +120,26 @@ def get_all_reports(
         base_query = base_query.filter(models.AnalysisReport.report_type == report_type)
 
     total = base_query.count()
-    reports = base_query.order_by(models.AnalysisReport.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    reports = base_query.order_by(models.AnalysisReport.created_at.desc()).offset((page - 1) * page_size).limit(
+        page_size).all()
 
     return {"items": reports, "total": total, "page": page, "pageSize": page_size}
 
 
-@router.get("/reports/{report_id}", response_model=schemas.AnalysisReport, summary="获取单个分析报告的元数据和完整结果")
+# 【修改处】将 response_model 从不存在的 AnalysisReportDetail 改为 AnalysisReport
+@router.get("/reports/{report_id}", response_model=schemas.AnalysisReport,
+            summary="获取单个分析报告的元数据和完整结果")
 def get_report_details(report_id: int, db: Session = Depends(get_db)):
     """
     获取指定分析报告的完整内容，包括元数据与分析结构体。
+    前端可以通过轮询此接口，检查 `ai_analysis_status` 和 `ai_analysis_cache` 字段来获取AI分析结果。
     """
     report = db.query(models.AnalysisReport).options(joinedload(models.AnalysisReport.exam)).filter(
         models.AnalysisReport.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=404, detail="报告未找到")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告未找到")
     return report
+
 
 def get_report_from_db(report_id: int, db: Session) -> models.AnalysisReport:
     """
@@ -197,20 +202,20 @@ def get_report_chart_data(report_id: int, db: Session = Depends(get_db)):
     return engine.get_chart_data()
 
 
-@router.delete("/reports/{report_id}", status_code=204, summary="删除分析报告")
+@router.delete("/reports/{report_id}", status_code=status.HTTP_204_NO_CONTENT, summary="删除分析报告")
 def delete_report(report_id: int, db: Session = Depends(get_db)):
     """
     从数据库中删除指定的分析报告。
     """
     report = db.query(models.AnalysisReport).filter(models.AnalysisReport.id == report_id).first()
     if not report:
-        raise HTTPException(status_code=404, detail="报告未找到")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="报告未找到")
     db.delete(report)
     db.commit()
     return
 
 
-@router.post("/reports/{report_id}/retry", status_code=202, summary="重试失败的分析任务")
+@router.post("/reports/{report_id}/retry", status_code=status.HTTP_202_ACCEPTED, summary="重试失败的分析任务")
 def retry_report_analysis(report_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     对失败的分析报告任务进行重试。会从报告源描述中恢复 scope_level 和 scope_ids。
@@ -224,15 +229,14 @@ def retry_report_analysis(report_id: int, background_tasks: BackgroundTasks, db:
         raise HTTPException(status_code=400, detail="报告缺少源描述，无法重试")
 
     try:
-        # 从 source_description 中提取 scope_level 和 scope_ids
         scope_level_match = re.search(r"Scope: (\w+)", report.source_description)
         scope_ids_match = re.search(r"IDs: \[([\d,\s]*)\]", report.source_description)
         if not scope_level_match or not scope_ids_match:
             raise ValueError("无法从描述中解析出原始分析范围")
-
         scope_level = scope_level_match.group(1)
         scope_ids_str = scope_ids_match.group(1)
-        scope_ids = [int(sid.strip()) for sid in scope_ids_str.split(',') if sid.strip().isdigit()] if scope_ids_str else []
+        scope_ids = [int(sid.strip()) for sid in scope_ids_str.split(',') if
+                     sid.strip().isdigit()] if scope_ids_str else []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析重试参数失败: {e}")
 
@@ -247,20 +251,3 @@ def retry_report_analysis(report_id: int, background_tasks: BackgroundTasks, db:
         scope_ids=scope_ids
     )
     return {"message": "任务已重新提交，正在后台处理。", "report_id": report.id}
-
-
-@router.post("/reports/{report_id}/ai-analysis", summary="为报告生成或获取AI分析摘要")
-def generate_ai_summary(report_id: int, db: Session = Depends(get_db)):
-    """
-    基于已有的分析报告内容，生成 AI 摘要（如 GPT 分析）。
-    若之前生成过将直接返回缓存结果。
-    """
-    try:
-        analysis, source = ai_analyzer.get_or_generate_ai_analysis(report_id=report_id, db=db)
-        return {"analysis": analysis, "source": source}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"发生未知错误: {str(e)}")

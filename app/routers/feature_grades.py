@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 from typing import List, Optional  # 确保引入 Optional
 
-from . import models, schemas
-from .database import get_db
+from app import models, schemas
+from app.database import get_db
 
 
 class GradeBase(BaseModel):

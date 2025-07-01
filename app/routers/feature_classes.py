@@ -4,8 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 
-from . import models, schemas
-from .database import get_db
+from app import models, schemas
+from app.database import get_db
 
 router = APIRouter(tags=["班级管理"])
 
